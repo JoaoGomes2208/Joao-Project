@@ -1,0 +1,106 @@
+#include "protheus.ch"
+#include "topconn.ch"
+#include "fileio.ch"
+#include "TBICONN.ch"
+#include "rwmake.ch"
+#INCLUDE "FWBROWSE.CH"
+#include "fwmvcdef.ch"
+#include "tbiconn.ch"
+
+//-------------------------------------------------------------------
+/*{Protheus.doc} WorkPedAtr
+Envia relatorio/workflow para o compras diretas
+@author  joao gomes
+@since   23/09/2024
+@version 1.0
+*/
+//-------------------------------------------------------------------
+User Function xRelPCAtrasado()
+	Local  aXEmpFil := {"03","01"}
+	Local _cQuery   := ""
+	Local _nCount   := 0
+	Local _cCab     := ""
+	Local _cMsg     := ""
+	Local _cRod     := ""
+	Local _cAssunto := "Pedidos em atraso"
+	Local _cTo      := "comprasdiretos@prodiet.com.br ; jvitor@prodiet.com.br "
+	Local dDataHoje := Date()
+
+
+	PREPARE ENVIRONMENT EMPRESA aXEmpFil[1] FILIAL aXEmpFil[2] FUNNAME FunName() TABLES "SC1, SB1"
+	FWLogMsg("INFO", /*cTransactionId*/, "Sched", "WorkRelSC", /*cStep*/, /*cMsgId*/, "Inicia query para SC não atendidas.", /*nMensure*/, /*nElapseTime*/, /*aMessage*/)
+	_cQuery += " SELECT  C7_FILIAL, C7_TIPO, C7_QUJE, C7_ITEM, C7_PRODUTO, C7_DESCRI, C7_NUM, C7_UM, C7_EMISSAO, C7_DATPRF, C7_SOLICIT, C7_QUANT, C7_GRUPCOM, B1_TIPO FROM " + RetSqlName("SC7")+" SC7"  + CRLF
+	_cQuery += " INNER JOIN "+ RetSqlName("SB1") + " SB1 ON SC7.C7_PRODUTO = SB1.B1_COD "
+	_cQuery += " WHERE SC7.C7_DATPRF BETWEEN " + DToS(DaySub(dDataHoje, 180)) + " AND " + DToS(dDataHoje) + CRLF
+	_cQuery += " AND SC7.D_E_L_E_T_ = ''" + CRLF
+	_cQuery += " AND SB1.D_E_L_E_T_ = ''" + CRLF
+	_cQuery += " AND SC7.C7_QUANT > C7_QUJE " + CRLF
+	_cQuery += " AND SC7.C7_RESIDUO != 'S' " + CRLF
+
+	If (Select ("QRY")<> 0)
+		QRY->(DbCloseArea())
+	EndIf
+
+	TcQuery _cQuery NEW Alias "QRY"
+	dbSelectArea("QRY")
+	QRY->(dbGoTop())
+
+	//conout("WorkRelSC - Inicia HTML para SC não atendidas.")
+	FWLogMsg("INFO", /*cTransactionId*/, "Sched", "WorkRelSC", /*cStep*/, /*cMsgId*/, "Inicia HTML para SC não atendidas.", /*nMensure*/, /*nElapseTime*/, /*aMessage*/)
+	_cCab += 			U_Imagem("CabEmail")
+	_cCab += 			U_Imagem("CabInfo")
+	_cCab += "			<table width='850' border='0' align='left' bgcolor='#ffffff'> "
+	_cCab += "				<tbody> "
+	_cCab += "				<p>Segue a relação de pedidos de compra atrasados. </p>"
+	_cCab += "					<tr> "
+	_cCab += "						<td align='justify'> "
+	_cCab += "							<table class='bottomBorder'> "
+	_cCab += "								<tbody> "
+	_cCab += "									<tr class=''>  "
+	_cCab += "										<th> Fil. </th> "
+	_cCab += "										<th> PC - Aberto </th> "
+	_cCab += "										<th> Item </th> "
+	_cCab += "										<th> Produto </th> "
+	_cCab += "										<th> Descrição </th> "
+	_cCab += "										<th> Quantidade </th> "
+	_cCab += "										<th> Quantidade Entregue </th> "
+	_cCab += "										<th> UM </th> "
+	_cCab += "										<th> Grupo </th> "
+	_cCab += "										<th> Emissão </th> "
+	_cCab += "										<th> Dt. entrega </th> "
+	_cCab += "										<th> Atrasado Ha </th> "
+	_cCab += "									</tr> "
+
+	While QRY->(!EOF())
+		_nCount++
+		FWLogMsg("INFO", /*cTransactionId*/, "Sched", "WorkRelSC", CValToChar(_nCount), /*cMsgId*/, "Impressão do item "+ CValToChar(_nCount) +" para SC não atendidas.", /*nMensure*/, /*nElapseTime*/, /*aMessage*/)
+		_cMsg += "	<tr>"
+		_cMsg += "		<td>" + QRY->C7_FILIAL +  " </td> "
+		_cMsg += "		<td>" + QRY->C7_NUM + " </td> "
+		_cMsg += "		<td>" + cValToChar(QRY->C7_ITEM) + " </td> " //RESOLVER ERRO
+		_cMsg += "		<td>" + AllTrim(QRY->C7_PRODUTO) + " </td> "
+		_cMsg += "		<td>" + QRY->C7_DESCRI + " </td> "
+		_cMsg += "		<td>" + cValToChar(QRY->C7_QUANT) + " </td> "
+		_cMsg += "		<td>" + cValToChar(QRY->C7_QUJE) + " </td> "
+		_cMsg += "		<td>" + QRY->C7_UM + " </td> "
+		_cMsg += "		<td>" + QRY->B1_TIPO + " </td> "
+		_cMsg += "		<td>" + DtoC(StoD(QRY->C7_EMISSAO)) + " </td> "
+		_cMsg += "		<td>" + DtoC(StoD(QRY->C7_DATPRF)) + " </td> "
+		//_cMsg += "		<td>" + QRY->C7_SOLICIT + " </td> "
+		_cMsg += "		<td>" + cValToChar(dateDiffDay(StoD(QRY->C7_DATPRF), date())) + " dias </td> "
+		_cMsg += "	</tr> "
+		QRY->(DbSkip())
+	EndDo
+
+	FWLogMsg("INFO", /*cTransactionId*/, "Sched", "WorkRelSC", /*cStep*/, /*cMsgId*/, "Impressão do rodapé para SC não atendidas.", /*nMensure*/, /*nElapseTime*/, /*aMessage*/)
+	_cRod += 				U_Imagem("RodEmail")
+	_cRod += 				U_Imagem("RodInfo")
+
+	If _nCount > 0
+		U_SendEMail(,,,,_cTo,_cAssunto,_cCab + _cMsg + _cRod,)
+		FWLogMsg("INFO", /*cTransactionId*/, "Sched", "WorkRelSC", /*cStep*/, /*cMsgId*/, "Envia e-mail de SC não atendidas.", /*nMensure*/, /*nElapseTime*/, /*aMessage*/)
+	Else
+		FWLogMsg("INFO", /*cTransactionId*/, "Sched", "WorkRelSC", /*cStep*/, /*cMsgId*/, "Não há atrasados.", /*nMensure*/, /*nElapseTime*/, /*aMessage*/)
+	EndIf
+	RESET ENVIRONMENT
+Return

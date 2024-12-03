@@ -1,0 +1,73 @@
+#include "TbiConn.ch"
+#Include "TOTVS.ch"
+#INCLUDE "TOPCONN.CH"
+#Include 'RestFul.CH'
+#include 'tlpp-core.th'
+#include 'tlpp-object.th'
+#include 'tlpp-rest.th'
+
+/*/{Protheus.doc} CalcPdFrFy
+Realiza os calculos de peso, cubagem, quantidade e valor do pedido SC6
+@type function
+@author Giulliano Pinheiro
+@since 10/05/2024
+@param _cFilial, Character, Filial do pedido
+@param _cFilial, Character, Filial do pedido
+@return Array, _aDadosPed, array com peso, cubagem, quantidade e valor total do pedido SC6.
+/*/
+User Function CalcPdFrFy(_cFilial, _cNumPed)
+
+    Local _aDadosPed := {}
+
+	dbSelectArea("SC6")
+    SC6->(dbSetOrder(1))
+    SC6->(DbGoTop())
+    If SC6->(dbSeek(_cFilial+_cNumPed)) //Buscas os dados do pedido na SC6    
+        dbSelectArea("SB5")
+        SB5->(dbSetOrder(1))
+        
+        dbSelectArea("SB1")
+        SB1->(dbSetOrder(1))
+
+		nPesoTotal		:= 0
+        nCubaTotal   	:= 0
+        nValorTotal		:= 0
+        nQtdeTotal		:= 0
+		nAuxCubT		:= 0
+
+        While SC6->(!EOF()) .AND. SC6->C6_FILIAL+SC6->C6_NUM == _cFilial+_cNumPed
+
+            SB5->(DbGoTop())
+            If SB5->(dbSeek(xFilial("SB5")+SC6->C6_PRODUTO))
+                nAuxCubT	+= ROUND(SB5->B5_COMPR * SB5->B5_ESPESS * SB5->B5_LARG,0)
+				
+				//Solicitado pelo Pedro - Prodiet 19/01/2023
+				If nAuxCubT == 0
+					nCubaTotal	+= 0.01
+				Else
+					nCubaTotal	+= nAuxCubT
+				EndIf
+
+            EndIf
+
+            SB1->(DbGoTop())
+            If SB1->(dbSeek(xFilial("SB1")+SC6->C6_PRODUTO))
+                nPesoTotal	+= SB1->B1_PESBRU * SC6->C6_QTDVEN
+            EndIf
+			
+			nValorTotal	+= SC6->C6_VALOR
+			nQtdeTotal	+= SC6->C6_QTDVEN
+            SC6->(DbSkip())
+        EndDo
+
+        //Alimenta array de retorno
+        aadd(_aDadosPed, nPesoTotal)
+        aadd(_aDadosPed, nCubaTotal)
+        aadd(_aDadosPed, nQtdeTotal)
+        aadd(_aDadosPed, nValorTotal)
+
+    Else
+        Return
+    EndIf
+
+Return _aDadosPed

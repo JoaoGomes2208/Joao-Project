@@ -1,0 +1,111 @@
+#include "TbiConn.ch"
+#Include "TOTVS.ch"
+#INCLUDE "TOPCONN.CH"
+#Include 'RestFul.CH'
+#include 'tlpp-core.th'
+#include 'tlpp-object.th'
+#include 'tlpp-rest.th'
+
+namespace GetDadosFretefy
+
+
+Class DadosFretefy
+
+    Private Data ApiKey as Character
+    Private Data cURL   as Character
+    Private Data aHeader as Array
+
+    Public Method New()
+    Public Method GetPedido()
+    Public Method GetTransp()
+
+Endclass
+
+/*/{Protheus.doc} ClassesFretefy::New
+Construtor
+@type method
+@author Joao Gomes
+@since 03/09/2024
+@return Object, ::self, Instancia da classe
+/*/
+Method New() Class DadosFretefy
+
+    // Api Key da base staging
+    ::ApiKey := "Authorization: ApiKey 387eb08e007ed8ef8501e45cc90cf5938e69b3d0d20939583c2f3976529670de"//GetNewPar("PD_FFAPIKE",'Authorization: ApiKey 329336341acdfeaa0e8bd17154955b541117b4b61cdaa902e3eea11964ab832d')
+    ::cURL := "https://api-fretefy.azurewebsites.net" //"https://api-fretefy-staging.azurewebsites.net" //
+    ::aHeader := {}
+    aAdd(::aHeader, ::ApiKey)
+    aAdd(::aHeader,'Content-Type: application/json; charset=utf-8')
+    //Unidade de teste
+Return ::self
+
+
+/*/{Protheus.doc} GetPedido
+    (long_description)
+    @author Joao Gomes
+    @since 30/08/2024
+    @version 1.0
+    @param cIdPedido, character, Id do pedido na SC5
+    @return oPedido, Object, Dados do pedido
+    /*/
+Method GetPedido(cIdPedido) Class DadosFretefy
+    Local aArea         := FWGetArea()
+    Local jJson         := JsonObject():New()
+    Local oRet          := JsonObject():New()
+    Local oRestClient   := FWRest():New(::cURL)
+    Local cPath     	:= '/api/pedidos/find'
+    Local cStatuscode   := ""
+    Local cJsonEnv      := ""
+
+    cJsonEnv += 'documentoNumero=' + cIdPedido + ''
+
+     oRestClient:setPath(cPath)
+
+    if oRestClient:Get(::aHeader,cJsonEnv)
+        jJson:FromJson('{"Json":'+ oRestClient:CRESULT +'}')
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+    else
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        jJson:FromJson('{"Json": '+ cStatuscode +'}')
+    endif
+
+    FWRestArea(aArea)
+
+
+Return jJson
+
+
+/*/{Protheus.doc} GetTransp
+    (long_description)
+    @author Joao Gomes
+    @since 30/08/2024
+    @version 1.0
+    @param cIdPedido, character, Id do pedido na SC5
+    @return oPedido, Object, Dados do pedido
+    /*/
+Method GetTransp(cIdPedido) Class DadosFretefy
+    Local aArea         := FWGetArea()
+    Local jJson         := JsonObject():New()
+    Local oRet          := JsonObject():New()
+    Local oRestClient   := FWRest():New(::cURL)
+    Local cPath     	:= '/api/pedidos/'+cIdPedido+'/carga'
+    Local cStatuscode   := ""
+
+     oRestClient:setPath(cPath)
+
+    if oRestClient:Get(::aHeader)
+        jJson:FromJson('{"Json":'+ oRestClient:CRESULT +'}')
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+    else
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        jJson:FromJson('{"Json": '+ cStatuscode +'}')
+    endif
+
+    FWRestArea(aArea)
+
+
+Return jJson

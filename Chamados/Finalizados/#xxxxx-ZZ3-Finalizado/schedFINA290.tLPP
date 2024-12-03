@@ -1,0 +1,253 @@
+#Include 'TOTVS.ch'
+#Include 'RestFul.CH'
+#INCLUDE "TOPCONN.CH"
+#INCLUDE 'protheus.ch'
+#INCLUDE 'tbiconn.ch'
+
+
+//-------------------------------------------------------------------
+/*{Protheus.doc} schedFINA290
+@TYPE Sched que verifica se a fatura já está vincualada a todos os CTEs e aglutina elas.
+@author  Joao Gomes
+@since   09/10/2024
+@compilado 11/10/2024
+@version 1.0
+*/
+//-------------------------------------------------------------------
+User Function xScedFINA290()
+
+	Local aFatPag 		:= {}
+	Local aTits 		:= {}
+	Local aTits2 		:= {}
+	Local nTamTit 		:= TamSx3("E2_NUM")[1]
+	Local nTamParc 		:= TamSx3("E2_PARCELA")[1]
+	Local nTamForn 		:= TamSx3("E2_FORNECE")[1]
+	Local nTamLoja 		:= TamSx3("E2_LOJA")[1]
+	Local nTamTipo 		:= TamSx3("E2_TIPO")[1]
+	//Local nTamFil  	:= TamSx3("E2_FILIAL")[1]
+	Local cNumFatur 	:= ""
+	Local cCondPag 		:= ""
+	Local nX 			:= 0
+	//Local cRet 			:= ""
+	Local cNumFil
+	Local nY 			:= 0
+	Local cResult 		:= ''
+	Local aLog 			:= {}
+	Local aCab 			:= {}
+	Local aFatAglu 		:= {}
+	Local cQry01 		:= ""
+	Local cQry02 		:= ""
+	Local nValCTESom 	:= 0
+	Local nValFat 		:= 0
+
+	Private lMsErroAuto := .F.
+	Private lAutoErrNoFile := .T.
+
+	PREPARE ENVIRONMENT EMPRESA '03' FILIAL '01' FUNNAME FunName() TABLES 'SB1'
+
+	cQry01 := " SELECT F1_FILIAL, F1_DOC, F1_SERIE, F1_FORNECE, F1_LOJA, F1_EMISSAO, F1_EST, F1_CHVNFE, F1_VALBRUT, F1_BASEICM, F1_VALICM, F1_COND, F1_XFAT," + CRLF
+	cQry01 += " A2_LOJA, A2_CGC, A2_COD, " + CRLF
+	cQry01 += " ZZ3_TITAGL, ZZ3_NUMCTE " + CRLF
+	cQry01 += " FROM " + RetSqlName('SF1') + " SF1 " + CRLF
+	cQry01 += " LEFT JOIN " + RetSqlName('SA2') + " SA2 ON SF1.F1_FORNECE = SA2.A2_COD"
+	cQry01 += " LEFT JOIN " + RetSqlName('ZZ3') + " ZZ3 ON SF1.F1_DOC = ZZ3.ZZ3_NUMCTE"
+	cQry01 += " WHERE SF1.D_E_L_E_T_ <> '*' " + CRLF
+	cQry01 += " AND SA2.D_E_L_E_T_ <> '*' " + CRLF
+	cQry01 += " AND ZZ3.D_E_L_E_T_ <> '*' " + CRLF
+	cQry01 += " AND SF1.F1_XFAT <> '' " + CRLF
+	cQry01 += " AND ZZ3.ZZ3_TITAGL = ''  "
+
+	If Select("CQRY1") <> 0
+		DbSelectArea("CQRY1")
+		DbCloseArea()
+	EndIf
+
+	TCQuery cQry01 New Alias "CQRY1"
+
+	While CQRY1->(!Eof())
+
+		cQry02 := " SELECT ZZ3_VALFAT, ZZ3_NUMFAT, ZZ3_FILIAL, ZZ3_NUMCTE, ZZ3_VALCTE, ZZ3_TRANSP, ZZ3_TITAGL, "+ CRLF
+		cQry02 += " F1_FILIAL, F1_DOC, F1_SERIE, F1_FORNECE, F1_LOJA, F1_EMISSAO, F1_EST, F1_CHVNFE, F1_VALBRUT, F1_BASEICM, F1_VALICM " + CRLF
+		cQry02 += " FROM " + RetSqlName('ZZ3') + " ZZ3 " + CRLF
+		cQry02 += " INNER JOIN " + RetSqlName('SF1') + " SF1 ON ZZ3.ZZ3_NUMCTE = SF1.F1_DOC AND ZZ3.ZZ3_TRANSP = SF1.F1_FORNECE "+ CRLF
+		cQry02 += " WHERE ZZ3.D_E_L_E_T_ <> '*' " + CRLF
+		cQry02 += " AND SF1.D_E_L_E_T_ <> '*'" + CRLF
+		cQry02 += " AND ZZ3.ZZ3_NUMFAT = " + CQRY1->F1_XFAT  + CRLF
+		cQry02 += " AND ZZ3.ZZ3_FILIAL = " + CQRY1->F1_FILIAL  + CRLF
+		cQry02 += " AND ZZ3.ZZ3_TRANSP = " + CQRY1->F1_FORNECE  + CRLF
+
+		If Select("CQRY2") <> 0
+			DbSelectArea("CQRY2")
+			DbCloseArea()
+		EndIf
+
+		TCQuery cQry02 New Alias "CQRY2"
+
+		While CQRY2->(!EOF())
+			nValFat := CQRY2->ZZ3_VALFAT
+			If AllTrim(CQRY2->ZZ3_TITAGL) == ""
+				nValCTESom += CQRY2->ZZ3_VALCTE
+				aCab := {}
+				//dados para aglutinação
+				aadd(aCab, CQRY2->F1_FILIAL)
+				aadd(aCab, CQRY2->F1_DOC)
+				aadd(aCab, CQRY2->F1_SERIE)
+				aadd(aCab, CQRY2->F1_FORNECE)
+				aadd(aCab, CQRY2->F1_LOJA)
+				aadd(aCab, CQRY2->F1_EMISSAO)
+				aadd(aCab, CQRY2->F1_EST)
+				aadd(aCab, CQRY2->F1_CHVNFE)
+				aadd(aCab, CQRY2->F1_VALBRUT)
+				aadd(aCab, CQRY2->F1_BASEICM)
+				aadd(aCab, CQRY2->F1_VALICM)
+				//Adiciona o cabeçalho no array para aglutinação de titulos
+				aadd(aFatAglu, aCab)
+			EndIf
+			CQRY2->(DbSkip())
+		EndDo
+
+
+		If nValCTESom == nValFat
+
+			cNumFatur 	:= allTrim(CQRY1->F1_XFAT)
+			cCondPag 	:= CQRY1->F1_COND
+			cNumFil 	:= CQRY1->F1_FILIAL
+
+			//[13] - ARRAY com os titulos da fatura - Geradores (esses títulos devem existir na base)
+			for nX := 1 to len(aFatAglu)
+				aTits := {}
+				AAdd(aTits,aFatAglu[nX][3])						//Prefixo do titulo
+				AAdd(aTits,PADR(aFatAglu[nX][2],nTamTit)) 		//Numero
+				AAdd(aTits,PADR(" ",nTamParc)) 					//Parcela
+				AAdd(aTits,PADR("NF",nTamTipo)) 				//Tipo
+				AAdd(aTits,.F.) 								//Título localizado na geracao de fatura (lógico). Iniciar com falso.
+				AAdd(aTits,PADR(aFatAglu[nX][4],nTamForn)) 		//Fornecedor
+				AAdd(aTits,PADR(aFatAglu[nX][5],nTamLoja)) 		//Loja
+				//PADR("D MG 01 ",nTamFil); // Filial (utilizada em fatura de títulos de diferentes filiais)
+				AAdd(aTits2, aTits)
+			next
+
+			AAdd(aFatPag,"FT") 							//Prefixo
+			AAdd(aFatPag,PADR("FT",nTamTipo))		 	//Tipo
+			AAdd(aFatPag,PADR(cNumFatur ,nTamTit)) 		//Numero da Fatura (se o numero estiver em branco obtem pelo FINA290)
+			AAdd(aFatPag,"049") 						//Natureza
+			AAdd(aFatPag,(DDATABASE-365))				//Data de
+			AAdd(aFatPag,DDATABASE)						//Data Ate
+			AAdd(aFatPag,PADR(CQRY1->A2_COD,nTamForn))	//Fornecedor
+			AAdd(aFatPag,PADR(CQRY1->A2_LOJA,nTamLoja)) //Loja
+			AAdd(aFatPag,PADR(CQRY1->A2_COD,nTamForn))	//Fornecedor para geracao
+			AAdd(aFatPag,PADR(CQRY1->A2_LOJA,nTamLoja)) //Loja do fornecedor para geracao
+			AAdd(aFatPag,cCondPag) 						//Condicao de pagto
+			AAdd(aFatPag,01) 							//Moeda
+			AAdd(aFatPag,aTits2) 						//ARRAY com os titulos da fatura - Geradores
+			AAdd(aFatPag,0)								//Valor de decrescimo
+			AAdd(aFatPag,0) 							//Valor de acrescimo
+
+			MsExecAuto( { |x,y| FINA290(x,y)}, 3, aFatPag )
+
+			If !lMsErroAuto
+				//Atualizar a tabela de integração
+				integAglu(cNumFil, cNumFatur)
+			Else
+				//Captura o log do execauto
+				aLog := GetAutoGRLog()
+				For nY := 1 To Len(aLog)
+					cResult := "Fatura: "+cNumFatur+" "
+					If !Empty(cResult)
+						cResult += CRLF
+					EndIf
+					cResult += aLog[nY]
+				Next nY
+			EndIf
+		endIf
+		nValCTESom := 0
+		nValFat := 0
+		ASize(aFatAglu,0)
+		ASize(aFatPag,0)
+		CQRY1->(DbSkip())
+	EndDo
+	RESET ENVIRONMENT
+Return nil
+
+/*/{Protheus.doc} integAglu
+    Realiza alteração dos ctes da fatura incluindo o numero do titulo aglutinado na tabela de integração.
+    @type Function
+    @author Giulliano Pinheiro
+    @since 04/08/2023
+    @param cRetEX290, character, Numero do titulo aglurinado.
+    @param cNumFil, character, Filial.
+    @param cNumFatur, character, Numero da fatura.
+/*/
+Static Function integAglu(cNumFil, cNumFatur)
+
+	Local aArea := FWGetArea()
+	Local aAreaZZ3 := ZZ3->(FWGetArea())
+
+	dbSelectArea('ZZ3')
+	ZZ3->(DBSETORDER(1)) //ZZ3_FILIAL+ZZ3_NUMFAT
+	ZZ3->(DbGoTop())
+	while ! ZZ3->(EOF())
+		if ZZ3->ZZ3_FILIAL == cNumFil .AND. ZZ3->ZZ3_NUMFAT == PADR(allTrim(cNumFatur),TAMSX3('ZZ3_NUMFAT')[1]," ")
+			if Reclock('ZZ3',.F.)
+				ZZ3->ZZ3_TITAGL := cNumFatur
+				ZZ3->(MSUNLOCK())
+			endif
+		endif
+		ZZ3->(dbSkip())
+	enddo
+
+	FWRestArea(aAreaZZ3)
+	FWRestArea(aArea)
+
+Return
+
+/*/{Protheus.doc} getNumTit(aFatAglu)
+    Gera log não retorna nada para o execauto FINA290, função criada para trazer o numero do titulo que acabou de ser criado.
+    @type Function
+    @author user
+    @since 04/08/2023
+    @param aFatAglu, array, array com os dados do titulo lançado.
+    @return character, cNumTitAgl, Numero do titulo recem lançado.
+
+Static Function getNumTit(aFatAglu)
+
+	Local aArea := FWGetArea()
+	Local aAreaZZ3 := ZZ3->(FWGetArea())
+	//Local cQryTit := GetNextAlias()//revisar
+	Local nCount := 0
+	Local cNumTitAgl := ''
+	Local cQry03 := ""
+
+    	cQry03 := "SELECT MAX(E2_NUM) AS E2_NUM" + CRLF
+    	cQry03 += "FROM " + RetSqlName('SE2') + " (NOLOCK) AS SE2 " + CRLF
+		cQry03 += "WHERE SE2.D_E_L_E_T_ <> '*'" + CRLF
+    	cQry03 += "AND SE2.E2_PREFIXO = '" + aFatAglu[1] +"' "+ CRLF
+    	cQry03 += "AND SE2.E2_TIPO = '" + aFatAglu[2] +"' "+ CRLF
+    	cQry03 += "AND SE2.E2_NATUREZ = '" + aFatAglu[4] +"' "+ CRLF
+    	cQry03 += "AND SE2.E2_FORNECE = '" + aFatAglu[7] +"' "+ CRLF
+    	cQry03 += "AND SE2.E2_LOJA = '" + aFatAglu[8] +"' "+ CRLF
+    	cQry03 += "AND SE2.E2_EMISSAO = '" + DtoS(aFatAglu[6]) +"' "
+
+		If Select("CQRY3") <> 0
+			DbSelectArea("CQRY3")
+			DbCloseArea()
+		EndIf
+
+		TCQuery cQry03 New Alias "CQRY3"
+
+	CQRY3->(DBGOTOP())
+	while !CQRY3->(EOF())
+		cNumTitAgl := allTrim(CQRY3->E2_NUM)
+		nCount += 1
+		CQRY3->(dbSkip())
+	enddo
+
+	if nCount > 1
+		cNumTitAgl := ''
+	endif
+
+	FWRestArea(aAreaZZ3)
+	FWRestArea(aArea)
+
+Return cNumTitAgl
+*/

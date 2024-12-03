@@ -1,0 +1,28 @@
+#Include "RwMake.ch"
+#Include "Protheus.ch"
+#Include "TBIConn.ch"
+#Include "TopConn.ch"  
+#Include "FileIO.ch"
+#Include "ParmType.ch"
+/*/{Protheus.doc} xForcaFF02()
+(Tela para forçar integração com FreteFy)
+@type  Function
+@author JOAO GOMES // bibliotecas adicionadas
+@since 02/09/2024
+@example
+(examples)
+@see (links_or_references)
+/*/
+User Function xForcaFF02()
+	Local oDlgPar, oDoc
+	Local cNumero := Space(9)
+	// Monta a tela
+	DEFINE MSDIALOG oDlgPar TITLE "Forca integracao com a FF" FROM 001,001 TO 240,390 PIXEL
+	@ 021,025 SAY "Adicione o numero de pedido que deseja forcar a integracao" SIZE 150,20 PIXEL OF oDlgPar
+	@ 052,025 SAY "Numero do pedido no Protheus:" SIZE 150, 009 PIXEL OF oDlgPar
+	@ 051,110 MSGET oDoc VAR cNumero F3 "SC5" SIZE 060,003 of oDlgPar PIXEL PICTURE "@E 999999"
+	@ 075,035 SAY "---------------------------------------------------------------------"   SIZE 200,09 PIXEL OF oDlgPar
+	DEFINE SBUTTON FROM 085,68 TYPE 1 ACTION (u_ForcaIntegraFF(cNumero),oDlgPar:End()) ENABLE OF oDlgPar
+	DEFINE SBUTTON FROM 085,108 TYPE 2 ACTION (oDlgPar:End()) ENABLE OF oDlgPar
+	ACTIVATE MSDIALOG oDlgPar CENTERED
+Return

@@ -1,0 +1,61 @@
+#Include "Protheus.ch"
+#Include "totvs.ch"
+#Include "topconn.ch"
+
+//-------------------------------------------------------------------
+/*{Protheus.doc} INCLUSAO_Z41
+Popula tabela Z41
+@author  Joao Gomes
+@since   23/09/2024
+@version 1.0
+*/
+//-------------------------------------------------------------------
+User Function PopulaTabela()
+	Local cArqCSV := "C:\Users\jvitor\OneDrive - Prodiet Nutricao Clinica Ltda\Documentos\ColunD.txt" // Especifique o caminho para o arquivo CSV
+	Local oFile as Object
+	Local aArq := {}
+	Local cLinDec := ""
+	Local i := 1
+	//Local nCase
+
+	oFile := FWFileReader():New(cArqCSV)
+	//Se o arquivo pode ser aberto
+	If (oFile:Open())
+
+		//Se nùo for fim do arquivo
+		If ! (oFile:EoF())
+			//Enquanto houver linhas a serem lidas
+			While (oFile:HasLine())
+
+				//Buscando o texto da linha atual
+				cLinDec := DecodeUTF8(oFile:GetLine(),"cp1252")
+				if ValType(cLinDec) != 'C'
+					cLinDec := DecodeUTF8(oFile:GetLine(),"cp1252")
+				endif
+
+				AADD(aArq, StrTokArr(cLinDec, ';'))
+
+			EndDo
+		EndIf
+	EndIf
+
+	//Fecha o arquivo e finaliza o processamento
+	oFile:Close()
+
+	nWhile := Len(aArq)
+	// Ler o conteùdo do arquivo linha por linha
+	While i<=nWhile
+		aArq[i][1] :=	PadL(aArq[i][1],6,"0")
+		// Manipular os dados e popular a tabela Z41 com RECKLOCK
+		DbSelectArea("SB1")
+		DBSetOrder(1)
+		If SB1->(DBSeek("  "+aArq[i][1]))
+			RecLock("SB1",.F.)
+				SB1->B1_XUNPALL := Val(aArq[i][2])
+			SB1->(MsUnlock())
+		EndIf
+		i++
+
+	End
+	MsgInfo("Importacao concluida com sucesso!", "Sucesso")
+Return

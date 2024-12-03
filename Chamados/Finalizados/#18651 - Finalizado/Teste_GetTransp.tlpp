@@ -1,0 +1,43 @@
+#INCLUDE "TOTVS.ch"
+#INCLUDE "TbiConn.ch"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE 'tlpp-core.th'
+
+
+User Function TesteBuscaTransp()
+    Local cPedido := '095305'
+    Local oResp
+    Local oResp1
+    Local oResp2
+    Local oClassFret := ClassesFretefy.DadosFretefy():New()
+    Local cIdTranspFF
+    Local cNewTransp
+    Local cNewCGC
+
+        //Get na primeira API para pegar os dados do pedido
+        oResp := oClassFret:GetPedido(cPedido)   
+        oResp1 := oResp:getJsonObject('Json')
+        cIdTranspFF := oResp1:getJsonObject('id')
+
+        //Get na segunda API utilizando ID do pedido para buscar a transportadora
+        oResp := oClassFret:GetTransp(cIdTranspFF)
+        oResp1 := oResp:getJsonObject('Json')
+        oResp2 := oResp1:getJsonObject('transportador')
+        cNewCGC := oResp2:getJsonObject('documento')
+        
+        //Consulta na SA4 com o CNPJ da transportadora para pegar o novo codigo.
+        DbSelectArea('SA4')
+        SA4->(DbSetOrder(3))
+        If SA4->(DbSeek(xFilial("SA4")+cNewCGC))
+            cNewTransp := SA4->A4_COD
+        else
+            MsgInfo("Transportadora não encontrada","Transp not found")
+        EndIf
+        
+
+
+
+
+return
+
+  

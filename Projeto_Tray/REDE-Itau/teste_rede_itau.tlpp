@@ -1,0 +1,34 @@
+#INCLUDE "TOTVS.ch"
+#INCLUDE "TbiConn.ch"
+#INCLUDE "TOPCONN.CH"
+#INCLUDE 'tlpp-core.th'
+
+User Function TesteRede()
+	Local cNSU := '502732265'
+	Local cDataDe := '2024-11-01'
+	Local cDataAte := '2024-11-01'
+	Local oResp1
+	Local oResp2
+	Local oResp3
+	Local oClasseRedeItau := ClassesRedeItau.ClRedeItau():New()
+	Local aMDR := {}
+	Local i := 1
+
+	oResp1 := oClasseRedeItau:getParcela(cNSU, cDataDe, cDataAte)
+	oResp2 := oResp1:getJsonObject('Json')
+	oResp3 := oResp2:getJsonObject('content')
+	aResp4 := oResp3:getJsonObject('installments')
+
+	While i<=Len(aResp4)
+		if aResp4[i]['nsu'] == Val(cNSU)
+			aadd(aMDR,{aResp4[i]['mdrAmount'], aResp4[i]['installmentNumber']})
+			aadd(aMDR,{aResp4[i]['expirationDate'], aResp4[i]['installmentNumber']})
+			aadd(aMDR,{aResp4[i]['nsu'], aResp4[i]['installmentNumber']})
+		endif
+		i++
+	End
+
+    aSort(aMDR, , , {|x, y| x[2] < y[2]})
+
+    
+Return

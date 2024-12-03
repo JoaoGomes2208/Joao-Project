@@ -1,0 +1,10 @@
+#Include "Protheus.ch"
+
+User Function testefor(param_name)
+    Local nX := 0
+    Local nY := 0
+
+        For nX := 1 to 2 
+            nY++
+        Next
+Return return_var

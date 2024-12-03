@@ -1,0 +1,22 @@
+
+User Function MT110GRV()
+
+	//Local nPosPed := aScan(aHeader,{|x| AllTrim(x[2]) == 'C1_PEDIDO'})
+	//Local nPosProd := aScan(aHeader,{|x| AllTrim(x[2]) == 'C1_PRODUTO'})
+	//Local nPosItem := aScan(aHeader,{|x| AllTrim(x[2]) == 'C1_ITEMPED'})
+
+	//DBSelectArea('SC1')
+	//SC1->(DbSetOrder(1))
+	//If SC1->(DbSeek(xFilial()+ C1_NUM + C1_ITEM + C1_ITEMGRD))
+		If AllTrim(SC1->C1_PRDREF) == ""
+			If RecLock( 'SC1' ,.F.)
+				SC1->C1_PRDREF := SC1->C1_PRODUTO
+				SC1->(MsUnlock())
+			EndIf
+		EndIf
+	//EndIf
+	//Local cPedOri:=Posicione('SC1',SC1->C1_FILIAL + SC1->C1_NUM + SC1->C1_ITEM + SC1->C1_ITEMGRD, 'C1_NUM')
+
+
+
+Return

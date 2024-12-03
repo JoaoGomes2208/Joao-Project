@@ -1,0 +1,172 @@
+#include "TbiConn.ch"
+#Include "TOTVS.ch"
+#INCLUDE "TOPCONN.CH"
+#Include 'RestFul.CH'
+#include 'tlpp-core.th'
+#include 'tlpp-object.th'
+#include 'tlpp-rest.th'
+
+namespace ClassesRedeItau
+
+/*/{Protheus.doc} ClRedeItau
+Classe para Trabalhar com a API gestão de vendas da Rede Itau.
+Aplicado no sched dia 26/11/2024
+@type class
+@author Giulliano Pinheiro
+@since 04/06/2024
+@Obs: Palavras chave: Rede Itau, Tray 
+@see https://developer.userede.com.br/ponto-partida
+/*/
+Class ClRedeItau
+
+    Private Data base_url as Character
+    Private Data base_url_new   as Character
+    Private Data ClientId as Character
+    Private Data ClientSecret as Character
+    Private Data access_token as Character
+    Private Data aHeader as Array
+
+    Private Method postToken()
+    Public Method New()
+    Public Method getVendaPorNSU(cNSU, cData)
+    Public Method getParcela(cNSU, cData)//pega as parcelas
+
+Endclass
+
+/*/{Protheus.doc} ClRedeItau::postToken
+Realiza a requisição de um token válido por 24 minutos.
+@type method
+@author Giuliano Pinheiro
+@since 04/06/2024
+@param cBaseUrl, character, URL para requisitar token.
+@return character, cToken, Token valido por 24 minutos-
+/*/
+Method postToken(cBaseUrl) Class ClRedeItau
+
+    Local aArea         := FWGetArea()
+    Local jJson         := JsonObject():New()
+    Local oRet          := JsonObject():New()
+    Local oRestClient   := FWRest():New(cBaseUrl)
+    Local cPath         := "/oauth2/token"
+    Local cParams       := "grant_type=client_credentials"
+    local cStatuscode   := ""
+    Local aHeader       := {}
+    Local cUserName     := "4db9a98c-1b63-43b5-993c-1a7bac269072"// <-PRD|HOM-> cf51394d-46d8-4f31-bcf7-dd08c13b4db7
+    Local cPass         := "8wbb0L9J8r"// <-PRD|HOM-> p8Sh30Xjc0
+    Local cBasicAuth    := ENCODE64(cUserName + ":" + cPass)
+    Local cToken        := ""
+
+
+    aadd(aHeader, "Content-Type: application/x-www-form-urlencoded")
+    aadd(aHeader,'Authorization:Basic ' + cBasicAuth)
+
+    oRestClient:SetPostParams(cParams)
+    oRestClient:setPath(cPath)
+
+    if oRestClient:Post(aHeader)
+        jJson:FromJson('{"Json":'+ oRestClient:CRESULT +'}')
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        cToken := jJson['Json']['access_token']
+    else
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        jJson:FromJson('{"Json": '+ cStatuscode +'}')
+    endif
+
+    FWRestArea(aArea)
+
+Return cToken
+
+/*/{Protheus.doc} ClassesRedeItau::New
+Construtor
+@type method 
+@author Giulliano Pinheiro
+@since 6/4/2024
+@return Object, ::self, Instancia da classe
+/*/
+Method New() Class ClRedeItau
+
+    ::base_url := "https://api.userede.com.br/redelabs" // <-PRD|HOM-> https://rl7-sandbox-api.useredecloud.com.br
+    //:base_url_new := "https://payments-apisandbox.useredecloud.com.br" // só precisa ser utilizada para testes
+    ::ClientId := "4db9a98c-1b63-43b5-993c-1a7bac269072"// <-PRD|HOM-> cf51394d-46d8-4f31-bcf7-dd08c13b4db7
+    ::ClientSecret := "8wbb0L9J8r"// <-PRD|HOM-> p8Sh30Xjc0
+    ::access_token := ::postToken(::base_url)
+    ::aHeader := {}
+    aAdd(::aHeader,'Content-Type: application/json')
+    aadd(::aHeader,"Authorization:Bearer "+::access_token)
+
+Return ::self
+
+/*/{Protheus.doc} ClRedeItau::getVendaPorNSU
+Busca uma venda na Rede Itau, utilizando o NSU da venda.
+@type method
+@author Giuliano Pinheiro
+@since 04/06/2024
+@param cNSU, character, Numero Sequencial Unico da operação na Rede Itau.
+@param cDataDe, character, Data de inicio da operação no formato YYYY-MM-DD
+@param cDataAte, character, Data de fim da operação no formato YYYY-MM-DD
+@return Json, Jjson, Json da venda pesquisada.
+/*/
+Method getVendaPorNSU(cNSU, cDataDe, cDataAte) Class ClRedeItau
+
+    Local aArea         := FWGetArea()
+    Local jJson         := JsonObject():New()
+    Local oRet          := JsonObject():New()
+    Local oRestClient   := FWRest():New(::base_url)
+    Local cCodEmpRede   := SuperGetMV('MV_XCODRED',.F.,'95335188') // <- PRD|HOM -> 22523510
+    Local cPath         := "/merchant-statement/v1/sales/"+ cCodEmpRede +"/daily?startDate="+cDataDe+"&endDate="+cDataAte+"&nsu="+cNSU
+    local cStatuscode   := ""
+
+    oRestClient:setPath(cPath)
+
+    if oRestClient:Get(::aHeader)
+        jJson:FromJson('{"Json":'+ oRestClient:CRESULT +'}')
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+    else
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        jJson:FromJson('{"Json": '+ cStatuscode +'}')
+        FWLogMsg("WARN", /*cTransactionId*/, "Faturamento", "ClassesRedeItau.ClRedeItau.getVendaPorNSU", /*cStep*/, /*cMsgId*/, " Erro - " + cStatuscode, /*nMensure*/, /*nElapseTime*/, /*aMessage*/)
+    endif
+
+    FWRestArea(aArea)
+
+Return jJson
+
+/*/{Protheus.doc} ClRedeItau::getParcela
+description
+@type method
+@author Giuliano Pinheiro
+@since 04/06/2024
+@param cNSU, character, param_description
+@param cData, character, param_description
+@return Json, Jjson, Json da venda pesquisada.
+Agora funciona
+/*/
+Method getParcela(cNSU, cDataDe, cDataAte) Class ClRedeItau
+
+    Local aArea         := FWGetArea()
+    Local jJson         := JsonObject():New()
+    Local oRet          := JsonObject():New()
+    Local oRestClient   := FWRest():New(::base_url)
+    Local cStoreID      := SuperGetMV('MV_XCODRED',.F.,'95335188')
+    Local cPath         := "/merchant-statement/v1/sales/installments?parentCompanyNumber="+cStoreID+"&subsidiaries="+cStoreID+"&startDate="+cDataDe+"&endDate="+cDataAte+"&nsu="+cNSU
+    local cStatuscode   := ""
+
+    oRestClient:setPath(cPath)
+
+    if oRestClient:Get(::aHeader)
+        jJson:FromJson('{"Json":'+ oRestClient:CRESULT +'}')
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE']
+    else
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        jJson:FromJson('{"Json": '+ cStatuscode +'}')
+    endif
+
+    FWRestArea(aArea)
+
+Return jJson

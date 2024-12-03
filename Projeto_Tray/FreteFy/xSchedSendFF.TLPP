@@ -1,0 +1,173 @@
+#include "TbiConn.ch"
+#Include "TOTVS.ch"
+#INCLUDE "TOPCONN.CH"
+#Include 'RestFul.CH'
+#include 'tlpp-core.th'
+#include 'tlpp-object.th'
+#include 'tlpp-rest.th'
+#include "rwmake.ch"
+#include "protheus.ch"
+
+/*/{Protheus.doc} xSendFF
+Envia pedidos da Tray direto para o Tracking no Fretefy chamado pelo fonte xBrowserForcaFF.
+@type function
+@author Joao Gomes
+@since 23/10/2024
+@param cPedido, character, numero do pedido
+@see https://fretefy.docs.apiary.io/#/reference/oferta-de-carga
+/*/
+User Function xSendFF()
+
+	Local aArea
+	Local oClassFret As object
+	Local _aPedido := {}
+	Local _aDadosPed := {}
+	Local aResp1
+	Local oResp2
+	Local oResp3
+	Local cCodFF
+	Local cNota
+	Local cToEmail := "jvitor@prodiet.com.br;ti@prodiet.com.br"
+	Local cQry2 := ""
+	Local cQry1 := ""
+
+	PREPARE ENVIRONMENT EMPRESA '03' FILIAL '01'
+
+	aArea := FWGetArea()
+	oClassFret := ClassesFretefy.CargasFretefy():New()
+
+	cQry1 := "SELECT C5_NUM FROM SC5030 " + CRLF
+	cQry1 += "WHERE C5_XNSU != '' " + CRLF
+	cQry1 += "AND C5_NOTA != '' " + CRLF
+	cQry1 += "AND UPPER(C5_XORIGEM) = 'TRAY' " + CRLF
+	cQry1 += "AND C5_EMISSAO BETWEEN GETDATE()-30 AND GETDATE()" + CRLF
+	cQry1 += "AND C5_XINTTR = ''" + CRLF
+	cQry1 += "AND D_E_L_E_T_ = ''"
+
+	If (Select ("QRY1")<> 0)
+		QRY1->(DbCloseArea())
+	EndIf
+
+	TcQuery cQry1 NEW Alias "QRY1"
+	dbSelectArea("QRY1")
+
+	cQry2 := "SELECT C5_FILIAL, C5_NUM, C5_XPICK, C5_XFRETEF, C5_NOTA, C5_EMISSAO, C5_FRETE," + CRLF
+	cQry2 += "A1_EST, A1_COD, A1_END, A1_MUN, A1_CGC, A1_NOME, " + CRLF
+	cQry2 += "F2_CHVNFE, F2_SERIE, F2_DOC" + CRLF
+	cQry2 += "FROM SC5030 SC5" + CRLF
+	cQry2 += "INNER JOIN SA1030 SA1 ON SC5.C5_CLIENTE = SA1.A1_COD" + CRLF
+	cQry2 += "INNER JOIN SF2030 SF2 ON SC5.C5_NOTA = SF2.F2_DOC" + CRLF
+	cQry2 += "WHERE SC5.C5_NUM = "+ QRY1->C5_NUM + CRLF
+	cQry2 += "AND UPPER(SC5.C5_XORIGEM) = 'TRAY'" + CRLF
+	cQry2 += "AND SC5.D_E_L_E_T_ = ''" + CRLF
+	cQry2 += "AND SF2.D_E_L_E_T_ = ''" + CRLF
+	cQry2 += "AND SA1.D_E_L_E_T_ = ''" + CRLF
+	cQry2 += "AND SC5.C5_FILIAL = '03' "
+
+	If (Select ("QRY2")<> 0)
+		QRY2->(DbCloseArea())
+	EndIf
+
+	TcQuery cQry2 NEW Alias "QRY2"
+	dbSelectArea("QRY2")
+	While QRY1->(!Eof())
+		_aDadosPed := u_CalcPdFrFy(QRY2->C5_FILIAL, QRY2->C5_NUM)
+		_cDtEmi := FormatDt(StoD(QRY2->C5_EMISSAO))
+		_cDtCole := FormatDt(DataValida(Date()+1))
+		cNota := cValToChar(Val(QRY2->F2_DOC))//Ajuste da NF para ir sem os "0000"
+
+		aadd(_aPedido, IIF(QRY2->C5_FILIAL == "03", ALLTRIM(GETMV("MV_XFRFYPE")), AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , QRY2->C5_FILIAL , { "M0_ENDENT" } )[1][2])))
+		aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , QRY2->C5_FILIAL , { "M0_CIDENT" } )[1][2]))
+		aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , QRY2->C5_FILIAL , { "M0_ESTENT" } )[1][2]))
+		aadd(_aPedido, _cDtCole)
+		aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , QRY2->C5_FILIAL , { "M0_CGC" } )[1][2]))
+		aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , QRY2->C5_FILIAL , { "M0_NOME" } )[1][2]))
+		aadd(_aPedido, AllTrim(QRY2->A1_END))
+		aadd(_aPedido, AllTrim(QRY2->A1_MUN))
+		aadd(_aPedido, QRY2->A1_EST)
+		aadd(_aPedido, AllTrim(QRY2->A1_CGC))
+		aadd(_aPedido, AllTrim(QRY2->A1_NOME))
+		aadd(_aPedido, QRY2->C5_NUM)
+		aadd(_aPedido, _cDtEmi)
+		aadd(_aPedido, _aDadosPed[1])
+		aadd(_aPedido, _aDadosPed[2])
+		aadd(_aPedido, _aDadosPed[3])
+		aadd(_aPedido, _aDadosPed[4])
+		aadd(_aPedido, QRY2->F2_CHVNFE)//allTrim(SF2->F2_CHVNFE))"35090808183359000153550010000023489999976516")//
+		aadd(_aPedido, QRY2->F2_SERIE)//allTrim(SF2->F2_SERIE))
+		aadd(_aPedido, cNota)
+		aadd(_aPedido, QRY2->C5_FRETE)
+		aadd(_aPedido, "15ea0920-d619-4119-b2fa-825fbc7e5c97")//<-TRANSPORTADORA PADRÃO
+
+		aResp1 := oClassFret:criaOferta(_aPedido)
+		//Nova validação
+		if aResp1[1] != "200"
+			logEmail("M460FIM FF: Falha ao enviar o pedido "+QRY2->C5_NUM+" com a NF "+QRY2->F2_DOC+" para o Fretefy.", aResp1[1], .T., cToEmail)
+		else
+			oResp2 := aResp1[2]
+			oResp3:= oResp2:GetJsonObject('Json')
+			cCodFF := oResp3:getJsonObject('codigo')
+			DbSelectArea("SC5")
+			DBSetOrder(1)
+			If SC5->(DBSeek(QRY2->C5_FILIAL+QRY2->C5_NUM))
+				If RecLock('SC5',.F.)
+					SC5->C5_XCODFF := cCodFF
+					SC5->C5_XINTTR := '*'
+					SC5->(MsUnlock())
+				EndIf
+			EndIf
+			MSGINFO("M460FIM FF: Sucesso", "Sucesso")
+			logEmail("M460FIM FF: O pedido "+QRY2->C5_NUM+" com a NF "+QRY2->F2_DOC+" foi enviado para o FreteFy corretamente com o codigo:" + cCodFF, "", .T., cToEmail)
+		endif
+
+		ASize(_aPedido,0)
+		QRY1->(DbSkip())
+	EndDo
+	FWRestArea(aArea)
+	RESET ENVIRONMENT
+
+Return
+
+/*/
+	{Protheus.doc} FormatDt
+	Formata data para integracao no fretefy
+	@type function
+	@author Joao Gomes
+	@param dData, character, data para formatar
+	@return character, data formatada
+	@Since 28/11/2024
+/*/
+Static Function FormatDt(dData)
+
+	Local cRetData  := ""
+
+	cRetData := substr(dtoS(dData),1,4)+'-'+substr(dtoS(dData),5,2)+'-'+substr(dtoS(dData),7,2) // fomarta data
+
+Return(cRetData)
+
+/*/{Protheus.doc} logEmail
+Envia e-mail como log 
+@type function
+@author Joao Gomes
+@return character, data formatada
+@Since 28/11/2024
+/*/
+Static Function logEmail(cSubFuncao, cLogMsg, lEnviaEmail, cMailTo)
+
+	Local _cTo          := cMailTo
+	Local _cAssunto     := 'CTEs FreteFy '+cSubFuncao
+	Local cBody         := ""
+	Local cHTML         := ""
+
+	if lEnviaEmail
+		cBody +="<html>"
+		cBody +="<body>"
+		cBody +="<h4>Ocorrencias na integração dos CTEs do FreteFy: "+cSubFuncao+"</h4>"
+		cHTML +="<p>"+cLogMsg+"</p>"
+		cBody += cHTML
+		cBody +="</body></hmtl>"
+
+		U_SendEMail(,,,,_cTo,_cAssunto,cBody)
+	endif
+
+Return

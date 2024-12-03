@@ -1,0 +1,102 @@
+#include 'totvs.ch'
+#include 'restful.ch'
+#INCLUDE "TOPCONN.CH"
+#include 'tlpp-core.th'
+#include 'tlpp-object.th'
+#include 'tlpp-rest.th'
+
+/*/{Protheus.doc} brwFreteFy
+Monitor de integração da integração das faturas liberadas do FreteFy. Programa de origem: PRODIET_WS_CON.prw
+@type function
+@author Giulliano Pinheiro
+@since 8/7/2023
+/*/
+User Function brwFreteFy()
+
+    Local aArea   := GetArea()
+    Local cFunBkp := FunName()
+    Local cTitulo := "Monitor Integração FreteFy"
+    Local oBrowse
+     
+    //Setando o nome da função, para a função customizada
+    SetFunName("brwFreteFy")
+
+    DBSELECTAREA("ZZ3")
+    ZZ3->(DBSETORDER(5))
+    OrdDescend(5, cValToChar(5), .T.)
+    
+    //Instânciando FWMBrowse, setando a tabela, a descrição
+    oBrowse := FWMBrowse():New()
+    oBrowse:SetAlias("ZZ3")
+    oBrowse:SetDescription(cTitulo)
+    oBrowse:OptionReport(.F.) //Disable Report Print
+    //Adicionando legendas (alguns exemplos - PINK, WHITE, GRAY, YELLOW, ORANGE, BLACK, BLUE)
+    oBrowse:AddLegend("ZZ3->ZZ3_INTEGR == .T.", "GREEN",  "CTE Integrado")
+    oBrowse:AddLegend("ZZ3->ZZ3_INTEGR == .F.", "RED",    "CTE NAO Integrado")
+
+    oBrowse:AddButton('Reintegra Fatura','u_ginfo()',,2,,.F.)
+     
+    //Ativando a navegação
+    oBrowse:Activate()
+     
+    //Voltando o nome da função
+    SetFunName(cFunBkp)
+     
+    RestArea(aArea)
+
+Return
+
+user function ginfo()
+    if MSGYESNO("Executar tentativa de reintegracao para o titulo: "+allTrim(ZZ3->ZZ3_NUMFAT)+ "?", "Confirma Reintegracao")
+        //MSGINFO( "Em desenvolvimento", "Informação" )
+        u_ReintegraFreteFy(ZZ3->ZZ3_JSON)
+    endif
+return
+
+/*/{Protheus.doc} ReintegraFreteFy
+Função para forçar a reintegração da fatura selecionada
+@type function 
+@author Giulliano Pinheiro
+@since 8/15/2023
+@param cWebHookJson, character, Json recebido através do webhook da FreteFy
+@return logical, lRet, Retorna True caso realize o post com sucesso.
+/*/
+User function ReintegraFreteFy(cWebHookJson)
+
+    Local aArea     := FWGetArea()  as Array
+    Local aHeader   := {}   as Array
+    Local cUrl      := "http://prodietnutricao122811.protheus.cloudtotvs.com.br:4050/REST"
+    Local cPath     := "/api/v1/xWSFRECON"
+    Local cUsrLogin := GETMV("MV_XAPIUSR")
+    Local cUsrSen   := GETMV("MV_XAPISNH")
+    Local cBasicAuth := ENCODE64(cUsrLogin + ":" + cUsrSen)
+    Local oJson     := JSonObject():New()
+    local jRet      := JSonObject():New()
+    Local oRest     := FWRest():New(cURL) as Object
+    Local lRet      := .F.
+    Local cResult, cResult2
+
+    aadd(aHeader,'User-Agent: Mozilla/4.0 (compatible; Protheus '+GetBuild()+')')
+    aAdd(aHeader,'Content-Type: application/json; charset=utf-8')
+    aadd(aHeader,'Authorization: Basic ' + cBasicAuth)
+
+    //oJson := cWebHookJson
+    jRet := oJson:FromJson(cWebHookJson)
+
+    if jRet != NIL
+        MSGALERT("Erro ao converter o Json, entre em contato com a TI ", "Erro no Json")
+    endif
+
+    oRest:SetPostParams(cWebHookJson)
+    oRest:SetPath(cPath)
+    if oRest:Post(aHeader)
+        MSGINFO("Fatura enviada com sucesso, verifique no monitor de integração se a fatura está integrada e aglutinada ", "Informação")
+        lRet := .T.
+    else
+        MSGALERT("Erro ao enviar o Json da Fatura para reintegracao, entre em contato com a TI ", "Erro")
+        cResult := oRest:getResult() 
+        cResult2 := oRest:GetLastError()
+    endif
+    FWRestArea(aArea)
+
+return lRet

@@ -1,0 +1,114 @@
+#include "TbiConn.ch"
+#Include "TOTVS.ch"
+#INCLUDE "TOPCONN.CH"
+#Include 'RestFul.CH'
+#include 'tlpp-core.th'
+#include 'tlpp-object.th'
+#include 'tlpp-rest.th'
+
+/*/{Protheus.doc} FrFyTray
+Envia pedidos da Tray direto para o Tracking no Fretefy. Usar com PE na geração de NF.
+@type function
+@author Giulliano Pinheiro
+@since 08/05/2024
+@param _cFilial, character, Filial do Pedido para enviar à Fretefy
+@param _cNumeroPedido, character, Numero do Pedido para enviar à Fretefy
+@see https://fretefy.docs.apiary.io/#/reference/oferta-de-carga
+
+/*/
+User Function FrFyTray(aDados)
+
+    Local aArea := FWGetArea()
+    Local oClassFret := ClassesFretefy.CargasFretefy():New()
+    Local _aPedido := {}
+    //Local lRetOferta := .F.
+    Local _aDadosPed := {}
+	Local aResp1
+	Local oResp2
+	Local oResp3
+	Local cCodFF
+	Local cNota
+	Local cToEmail := "jvitor@prodiet.com.br"
+
+	_aDadosPed := u_CalcPdFrFy(SC5->C5_FILIAL, SC5->C5_NUM)
+	_cDtEmi := FormatDt(SC5->C5_EMISSAO)//Corrigido 19-11
+	_cDtCole := FormatDt(DataValida(Date()+1))
+	cNota := cValToChar(Val(aDados[6]))//Ajuste da NF para ir sem os "0000"
+
+	aadd(_aPedido, IIF(SC5->C5_FILIAL == "03", ALLTRIM(GETMV("MV_XFRFYPE")), AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , SC5->C5_FILIAL , { "M0_ENDENT" } )[1][2])))
+	aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , SC5->C5_FILIAL , { "M0_CIDENT" } )[1][2]))
+	aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , SC5->C5_FILIAL , { "M0_ESTENT" } )[1][2]))
+	aadd(_aPedido, _cDtCole)
+	aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , SC5->C5_FILIAL , { "M0_CGC" } )[1][2]))
+	aadd(_aPedido, AllTrim(FWSM0Util():GetSM0Data( cEmpAnt , SC5->C5_FILIAL , { "M0_NOME" } )[1][2]))
+	aadd(_aPedido, AllTrim(SA1->A1_END))
+	aadd(_aPedido, AllTrim(SA1->A1_MUN))
+	aadd(_aPedido, aDados[3])
+	aadd(_aPedido, AllTrim(SA1->A1_CGC))
+	aadd(_aPedido, AllTrim(SA1->A1_NOME))
+	aadd(_aPedido, aDados[2])
+	aadd(_aPedido, _cDtEmi)
+	aadd(_aPedido, _aDadosPed[1])
+	aadd(_aPedido, _aDadosPed[2])
+	aadd(_aPedido, _aDadosPed[3])
+	aadd(_aPedido, _aDadosPed[4])
+	aadd(_aPedido, aDados[4])//allTrim(SF2->F2_CHVNFE))"35090808183359000153550010000023489999976516")//
+	aadd(_aPedido, aDados[5])//allTrim(SF2->F2_SERIE))
+	aadd(_aPedido, cNota)
+	aadd(_aPedido, SC5->C5_FRETE)
+	aadd(_aPedido, "15ea0920-d619-4119-b2fa-825fbc7e5c97")
+    
+	aResp1 := oClassFret:criaOferta(_aPedido)
+	//Nova validação
+    if aResp1[1] != "200"
+        logEmail("M460FIM: Falha ao enviar o pedido "+aDados[2]+" com a NF "+aDados[6]+" para o Fretefy", aResp1[1], .T., cToEmail)
+    else
+		oResp2 := aResp1[2]
+		oResp3:=oResp2:GetJsonObject('Json')
+		cCodFF := oResp3:getJsonObject('codigo')
+		If RecLock('SC5',.F.)
+				SC5->C5_XFRETEF := cCodFF
+			SC5->(MsUnlock())
+		EndIf
+		MSGINFO("M460FIM: Sucesso", "Sucesso")
+		logEmail("M460FIM: O pedido "+aDados[2]+" com a NF "+aDados[6]+" foi enviado para o FreteFy corretamente", oResp3, .T., cToEmail)
+    endif
+
+    FWRestArea(aArea)
+	
+Return
+
+/*/{Protheus.doc} FormatDt
+Formata data para integracao no fretefy 
+@type function
+@author Joao Gomes
+@param dData, character, data para formatar
+@return character, data formatada
+/*/
+Static Function FormatDt(dData)
+
+    Local cRetData  := ""
+
+    cRetData := substr(dtoS(dData),1,4)+'-'+substr(dtoS(dData),5,2)+'-'+substr(dtoS(dData),7,2) // fomarta data
+
+Return(cRetData)
+
+Static Function logEmail(cSubFuncao, cLogMsg, lEnviaEmail, cMailTo)
+
+    Local _cTo          := cMailTo
+    Local _cAssunto     := 'CTEs FreteFy '+cSubFuncao
+    Local cBody         := ""
+    Local cHTML         := ""
+    
+    if lEnviaEmail
+        cBody +="<html>"
+        cBody +="<body>"
+        cBody +="<h4>Ocorrencias na integração dos CTEs do FreteFy: "+cSubFuncao+"</h4>"
+        cHTML +="<p>"+cLogMsg+"</p>"
+        cBody += cHTML
+        cBody +="</body></hmtl>"
+
+        U_SendEMail(,,,,_cTo,_cAssunto,cBody)
+    endif
+
+Return

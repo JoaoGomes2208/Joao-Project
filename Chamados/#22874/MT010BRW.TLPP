@@ -1,0 +1,92 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "FWBROWSE.CH"
+#INCLUDE "TOTVS.ch"
+#INCLUDE "FWMVCDef.ch"
+
+/*/{Protheus.doc} MA010BRW
+(Adiciona botao na consulta)
+@type user function
+@author Joao Gomes
+@since 05/11/2024
+@version 1.0
+@see (links_or_references)
+/*/
+User Function MT010BRW()
+	Local aRotina := {} as array
+	aAdd(aRotina, { "Custo Medio", "U_xCustoMedio1()", 9, 0 })
+Return (aRotina)
+
+/*/{Protheus.doc} xCustoMedio
+(Busca Cutos medio dos produtos)
+@type user function
+@author Joao Gomes
+@since 05/11/2024
+@version 1.0
+@see (links_or_references)
+/*/
+User Function xCustoMedio1()
+
+	Local oDlg      As Object
+	Local aColumns  As Array
+	Local nContFlds As Numeric
+	Local cQry  := ""
+
+	cQry += "SELECT CODIGO, DESCRI, convert(DATE,_DATA,103) AS _DATA, QUANTIDADE_INICIAL, CUSTO_MEDIO" + CRLF
+	cQry += "FROM (SELECT B9_COD AS CODIGO, B1.B1_DESC AS DESCRI, CONVERT(DATE, B9_DATA) AS _DATA, SUM(B9_QINI) AS QUANTIDADE_INICIAL, ROUND(AVG(B9_CM1),2) AS CUSTO_MEDIO" + CRLF
+	cQry += "FROM SB9030 B9 (NOLOCK)" + CRLF	
+	cQry += "INNER JOIN SB1030 B1 ON B1_COD = B9_COD" + CRLF
+	cQry += "WHERE B9.D_E_L_E_T_ = ''" + CRLF
+	cQry += "AND B1.D_E_L_E_T_ = ''" + CRLF
+	cQry += "AND B9.B9_DATA > GETDATE()-365" + CRLF
+	cQry += "AND B9.B9_COD = '" + SB1->B1_COD + "'" + CRLF
+	cQry += "GROUP BY B9_COD, B1.B1_DESC, B9_DATA" + CRLF
+	cQry += "UNION ALL" + CRLF
+	cQry += "SELECT B2_COD AS CODIGO, B1.B1_DESC AS DESCRI, GETDATE() AS _DATA, SUM(B2_QATU) AS QUANTIDADE_INICIAL, ROUND(SUM(B2_VATU1/B2_QATU),2) AS CUSTO_MEDIO" + CRLF
+	cQry += "FROM SB2030 B2 " + CRLF
+	cQry += "INNER JOIN SB1030 B1 ON B1.B1_COD = B2_COD" + CRLF
+	cQry += "WHERE B2.D_E_L_E_T_ = ''" + CRLF
+	cQry += "AND B1.D_E_L_E_T_ = ''" + CRLF
+	cQry += "AND B2.B2_COD = '"+ SB1->B1_COD + "'" + CRLF
+	cQry += "AND B2_QATU > 0" + CRLF
+	cQry += "GROUP BY B2_COD, B1.B1_DESC" + CRLF
+	cQry += ") AS T" + CRLF
+	cQry += "ORDER BY _DATA" + CRLF
+
+	cAliasTemp  := MpSysOpenQuery( cQry )
+
+	DEFINE MSDIALOG oDlg TITLE "Custo Médio" FROM 0,0 TO 600, 1200 PIXEL
+
+	oBrowse := FWBrowse():New()
+	oBrowse:SetDataTable( .T. )
+	oBrowse:SetAlias( cAliasTemp )
+	oBrowse:SetOwner( oDlg )
+	oBrowse:SetDescription( "Custo Médio" )
+
+	//-------------------------------------------------------------------
+	// Adiciona as colunas do Browse
+	//-------------------------------------------------------------------
+	aColumns    := {}
+	aFields     := {}
+
+	aAdd( aFields, "CODIGO" )
+	aAdd( aFields, "DESCRI" )
+	aAdd( aFields, "_DATA" )
+	aAdd( aFields, "QUANTIDADE_INICIAL"  )
+	aAdd( aFields, "CUSTO_MEDIO" )
+
+
+	For nContFlds := 1 To Len( aFields )
+		AAdd( aColumns, FWBrwColumn():New() )
+		aColumns[Len(aColumns)]:SetData( &("{ || " + aFields[nContFlds] + " }") )
+		aColumns[Len(aColumns)]:SetTitle( aFields[nContFlds] )
+		aColumns[Len(aColumns)]:SetSize( 15 )
+		aColumns[Len(aColumns)]:SetID( aFields[nContFlds] )
+	Next nContFlds
+
+	oBrowse:SetColumns(aColumns)
+	oBrowse:Activate()
+
+	ACTIVATE MSDIALOG oDlg
+
+
+Return

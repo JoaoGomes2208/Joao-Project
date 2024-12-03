@@ -1,0 +1,100 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "RWMAKE.CH"
+#Include "Totvs.ch"
+
+//-------------------------------------------------------------------
+/*{Protheus.doc} SF1
+Browser para busca de CTEs e inclusão a fatura
+@author  Joao Gomes
+@since   05/09/2024
+@Compilado 11/10/2024
+@version 1.0
+*/
+//-------------------------------------------------------------------
+User function xMbrwSF1()
+
+	Local cTabela     := "SF1"
+	Private cCadastro := "Cabecalho das NFs de Entrada"
+	Private aRotina   := {}
+
+	//Montando o Array aRotina, com funções que serão mostradas no menu
+	aAdd(aRotina,{"Pesquisar",  "PesqBrw",  0, 1})
+	aAdd(aRotina,{"Visualizar", "AxVisual", 0, 2})
+	aAdd(aRotina,{"Inclui Fat", "U_xIncFat",0, 3})
+	//aAdd(aRotina,{"Alterar",    "AxAltera", 0, 3})
+	//aAdd(aRotina,{"Excluir",    "AxDeleta", 0, 4})
+
+	//Selecionando a tabela e ordenando
+	DbSelectArea(cTabela)
+	(cTabela)->(DbSetOrder(1))
+
+	//Montando o Browse
+	mBrowse(6, 1, 22, 75, cTabela)
+
+	//Encerrando a rotina
+	(cTabela)->(DbCloseArea())
+	//RestArea(aArea)
+
+Return Nil
+
+/*/{Protheus.doc} xIncFat
+(long_description)
+@type user function
+@author Joao Gomes
+@since 03/10/2024
+@param param_name, param_type, param_descr
+@return lRet, Logical, .T. se incluiu .F. se não incluiu
+/*/
+User Function xIncFat()
+	Local oDialog
+	Local oFatura
+	Local oMainWnd
+	Local cValFat
+	//Local aCab		:= {}
+	//Local aFatAglu	:= {}
+	Local lOk 		:= .F.
+	Local _cFatura	:= Space(9)
+	Local _lRet 	:= .F.
+	Local _cNumFat 	:= SF1->F1_DOC
+	Local _cUser 	:= SuperGetMV("MV_USRFAT",.F.,"000000,001331,001317")
+
+	If __cUserId $ (_cUser) // Se o usuário está no parametro - Valida
+		Define MsDialog oDialog TITLE "Inclusão de Fatura" STYLE DS_MODALFRAME FROM 001,001 TO 240,390 OF oMainWnd PIXEL
+		@ 035, 005 SAY "Numero da fatura: " 		SIZE 060, 007 OF oDialog PIXEL
+		@ 033, 055 MSGET oFatura VAR _cFatura  F3 "ZZ3" SIZE 060,003 of oDialog PIXEL
+		ACTIVATE MSDIALOG oDialog ON INIT EnchoiceBar(oDialog, {|| (lOk := .T., oDialog:End()) }, {|| oDialog:End() }) CENTERED
+
+		//ATUALIZA PARAMETRO
+		If lOk
+			DbSelectArea("ZZ3")
+			DbSetOrder(1)
+			If ZZ3->(DbSeek(SF1->F1_FILIAL+_cFatura))
+				cValFat := ZZ3->ZZ3_VALFAT
+				If RecLock('SF1',.F.)
+					SF1->F1_XFAT := _cFatura
+					SF1->(MsUnlock())
+				EndIf
+
+				//Grava na ZZ3
+				If Reclock("ZZ3", .T.)
+					ZZ3->ZZ3_FILIAL  := SF1->F1_FILIAL
+					ZZ3->ZZ3_NUMFAT  := AllTrim(_cFatura)
+					ZZ3->ZZ3_VALFAT  := cValFat
+					ZZ3->ZZ3_NUMCTE  := SF1->F1_DOC
+					ZZ3->ZZ3_VALCTE  := SF1->F1_VALBRUT
+					ZZ3->ZZ3_TRANSP  := SF1->F1_FORNECE
+					ZZ3->ZZ3_INTEGR  := .T.
+					ZZ3->ZZ3_DTINTE  := Date()
+					MsUnlock("ZZ3")
+				EndIf
+				_lRet:= .T.
+			EndIf
+		Else
+			MsgAlert("Voce Cancelou a operação. NF : " + _cNumFat +" NÃO Alterada!")
+		Endif
+	EndIf
+
+	If _lRet
+		MsgInfo("Alterado Nota Fiscal " + _cNumFat + " com sucesso!")
+	EndIf
+Return Nil

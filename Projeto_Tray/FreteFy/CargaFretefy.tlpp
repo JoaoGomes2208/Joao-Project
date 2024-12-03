@@ -1,0 +1,249 @@
+#include "TbiConn.ch"
+#Include "TOTVS.ch"
+#INCLUDE "TOPCONN.CH"
+#Include 'RestFul.CH'
+#include 'tlpp-core.th'
+#include 'tlpp-object.th'
+#include 'tlpp-rest.th'
+
+namespace ClassesFretefy
+
+/*/{Protheus.doc} FrFyTray
+Classe para Trabalhar com envio de pedidos em Oferta de Carga.
+@type class
+@author Giulliano Pinheiro
+@since 08/05/2024
+@param _cNumeroPedido, character, Numero do Pedido para enviar à Fretefy
+@see https://fretefy.docs.apiary.io
+/*/
+Class CargasFretefy 
+
+    Private Data ApiKey as Character
+    Private Data cURL   as Character
+    Private Data aHeader as Array
+    Private Data cUnidadeDeNegocio as Character
+    Private Data cTipoCargaID as Character
+    Private Data _cvisibilidade as Character //Oferecimento
+    Private Data _nMotivoOrigem as Numeric // tipo coleta
+    Private Data _nMotivoColeta as Numeric // indica que se trata de uma entrega
+    Private Data _nUnidadeMedidaFreteFy as Numeric // 5 para liquido e 7 para m3
+    Private Data _ctipoTarifaId as Character //Tabela de frete, consultar no get https://api-fretefy-staging.azurewebsites.net/api/tipos/10
+    Private Data _nModalidade as Numeric // tipo modalidade carga, 1 completa, 2 compartilhada, 3 fracionada
+    Private Data CFGOferecimentoID as Character
+
+    Public Method New()
+    Private Method getUnidadeNegocio() // id da filial no Fretefy
+    Public Method criaOferta()
+
+Endclass
+
+/*/{Protheus.doc} ClassesFretefy::New
+Construtor
+@type method
+@author Giulliano Pinheiro
+@since 08/05/2024
+@return Object, ::self, Instancia da classe
+/*/
+Method New() Class CargasFretefy
+
+    // Api Key da base staging
+    ::ApiKey := GetNewPar("PD_FFAPIKE",'Authorization: ApiKey 7d6c2656ab5524627ab3d4f0d6903bbde52dbe2dee3ed3d25a42088aaf5ef66c')//<- Produção "Authorization: ApiKey 329336341acdfeaa0e8bd17154955b541117b4b61cdaa902e3eea11964ab832d" //
+    ::cURL :=  "https://api-fretefy.azurewebsites.net"//<-Produção"https://api-fretefy-staging.azurewebsites.net" //
+    ::aHeader := {}
+    aAdd(::aHeader, ::ApiKey)
+    aAdd(::aHeader,'Content-Type: application/json; charset=utf-8')
+    //Unidade de teste
+    ::cUnidadeDeNegocio := "4584c58c-c26d-e911-b49e-00155d2c44f1"// <- Padrão producao
+    ::cTipoCargaID := "b8eb87bc-e39b-4799-993a-dd89ac93af06" //Caixa
+    ::_cvisibilidade    := "2" //Oferecimento
+    ::_nMotivoOrigem    := 1 // tipo coleta
+    ::_nMotivoColeta    := 2 // indica que se trata de uma entrega
+    ::_nUnidadeMedidaFreteFy := 7 // 5 para liquido e 7 para m3
+    ::_ctipoTarifaId := "25272f18-a53f-4f0d-a84b-f56688dba202"
+    ::_nModalidade := 1 // completa
+    ::CFGOferecimentoID := "e61d0281-7b91-ef11-8473-002248d2f2dc"
+
+Return ::self
+
+/*/{Protheus.doc} getUnidadeNegocio
+    buscao o id da filial no Fretefy para colocar na oferta de carga. Se der erro, retorna vazio.
+    @type method
+    @author Giulliano Pinheiro
+    @since 08/05/2024
+    @param _cEmpresaFilial, character, descricao ou codigo
+    @return Character, cUnidadeDeNegocio, codigo unidade de negocio fretefy.
+    @see https://app-fretefy-staging.azurewebsites.net/#/configuracoes/unidades-negocio
+    /*/
+Method getUnidadeNegocio(_cEmpresaFilial) Class CargasFretefy
+    
+    Local aArea         := FWGetArea()
+    Local jJson         := JsonObject():New()
+    Local oRet          := JsonObject():New()
+    Local oRestClient   := FWRest():New(::cURL)
+    Local cPath         := "/api/unidadenegocio"
+    local cStatuscode   := ""
+    Local _cUnidadeDeNegocio := ""
+
+    oRestClient:setPath(cPath)
+
+    if oRestClient:Get(::aHeader)
+        jJson:FromJson('{"Json":'+ oRestClient:CRESULT +'}')
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        _cUnidadeDeNegocio := jJson['Json']['id']
+    else
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        jJson:FromJson('{"Json": '+ cStatuscode +'}')
+    endif
+
+    FWRestArea(aArea)
+
+Return _cUnidadeDeNegocio
+
+/*/{Protheus.doc} CargasFretefy::criaOferta
+Cria oferta para passar direto para o tracking.
+O array deve estar no seguinte formato
+1 Empresa Endereco
+2 Empresa Cidade
+3 Empresa UF
+4 Data para coleta (C5_EMISSAO OU f2_emissao + 1?)
+5 Empresa CNPJ
+6 Empresa Nome
+7 Cliente Endereco
+8 Cliente Cidade
+9 Cliente UF
+10 Cliente CPF
+11 Cliente Nome
+12 Pedido Numero
+13 Pedido Emissao
+14 Pedido Peso
+15 Pedido Cubagem
+16 Pedido Quantidade
+17 Pedido Valor
+18 NF Chave
+19 NF Serie
+20 NF Numero
+21 Pedido Valor Frete
+22 Transportadora ID FreteFy
+@type method
+@author Giulliano Pinheiro
+@since 08/05/2024
+@param aDadosPedido, array, Dados do pedido.
+@return Logical, lRet, Retorna verdadeiro se o post for executado com sucessox.
+@see https://fretefy.docs.apiary.io/#/reference/oferta-de-carga
+/*/
+Method criaOferta(aDadosPedido) Class CargasFretefy
+
+    Local aArea         := FWGetArea()
+    Local jJson         := JsonObject():New()
+    Local jJsonParaPost := JsonObject():New()
+    Local oRet          := JsonObject():New()
+    Local oRestClient   := FWRest():New(::cURL)
+    Local cPath         := "/api/ofertacarga"
+    local cStatuscode   := ""
+    Local aOrigem       := {}
+    Local aDestino      := {}
+    Local aCarga            := {}
+    Local aPagamento        := {}
+    Local aDirecionamentos  := {}
+    Local aEmpresa          := {}
+    Local aDestinoPedido    := {}
+    Local aDocPedido        := {}
+    Local cJsonString       := ""
+    Local lRet          := .F.
+    Local aRet          := {}
+
+    oRestClient:setPath(cPath)
+
+    aadd(aEmpresa, JsonObject():New())
+    aEmpresa[1]["documento"] := aDadosPedido[5]
+    aEmpresa[1]["razaoSocial"] := aDadosPedido[6]
+    aEmpresa[1]["endereco"] := aDadosPedido[1]
+    aEmpresa[1]["cidade"] := aDadosPedido[2]
+    aEmpresa[1]["uf"] := aDadosPedido[3]
+
+    aadd(aOrigem, JsonObject():New())
+    aOrigem[1]['localidade']    := aDadosPedido[1]
+    aOrigem[1]['cidade']        := aDadosPedido[2]
+    aOrigem[1]['uf']            := aDadosPedido[3]
+    aOrigem[1]['dhInicio']      := aDadosPedido[4]
+    aOrigem[1]['motivo']        := ::_nMotivoOrigem // tipo coleta
+    aOrigem[1]['empresa']       := aEmpresa[1]
+
+    aadd(aDestinoPedido, JsonObject():New())
+    aDestinoPedido[1]["documento"] := aDadosPedido[10] //cpf
+    aDestinoPedido[1]["razaoSocial"] := aDadosPedido[11]
+    aDestinoPedido[1]["endereco"] := aDadosPedido[7]
+    aDestinoPedido[1]["cidade"] := aDadosPedido[8]
+    aDestinoPedido[1]["uf"] := aDadosPedido[9]
+
+    aadd(aDocPedido, JsonObject():New())
+    aDocPedido[1]["pedido"] := aDadosPedido[12]
+    aDocPedido[1]["dhCriacaoPedido"] :=  aDadosPedido[13]
+    aDocPedido[1]["emitente"] :=  aEmpresa[1]
+    aDocPedido[1]["destinatario"] :=  aDestinoPedido[1]
+    aDocPedido[1]["peso"] :=  aDadosPedido[14]
+    aDocPedido[1]["cubagem"] :=  aDadosPedido[15]
+    aDocPedido[1]["quantidade"] :=  aDadosPedido[16]
+    aDocPedido[1]["valor"] :=  aDadosPedido[17]
+    aDocPedido[1]["chave"] := aDadosPedido[18]
+    aDocPedido[1]["serie"] :=  aDadosPedido[19]
+    aDocPedido[1]["numero"] :=  aDadosPedido[20]
+
+    aadd(aDestino, JsonObject():New())
+    aDestino[1]["localidade"] := aDadosPedido[7]
+    aDestino[1]["cidade"] := aDadosPedido[8]
+    aDestino[1]["uf"] := aDadosPedido[9]
+    aDestino[1]["motivo"] := ::_nMotivoColeta // indica que se trata de uma entrega
+    aDestino[1]["empresa"] := aDestinoPedido[1]
+    aDestino[1]["documentos"] := aDocPedido
+
+    aadd(aCarga, JsonObject():New())
+    aCarga[1]["unidadeMedida"] := ::_nUnidadeMedidaFreteFy // fixo ???
+    aCarga[1]["modalidade"] := ::_nModalidade // 1 = ?
+    aCarga[1]["pesoBruto"] := aDadosPedido[14]
+    aCarga[1]["valorCarga"] := aDadosPedido[17]
+    aCarga[1]["volume"] := aDadosPedido[16]
+    aCarga[1]["quantidade"] := aDadosPedido[16]
+    aCarga[1]["tipoCargaId"] := ::cTipoCargaID
+
+    aadd(aPagamento, JsonObject():New())
+    aPagamento[1]["tipoTarifaId"] := ::_ctipoTarifaId
+    aPagamento[1]["valorFrete"] := aDadosPedido[21]
+
+    //aadd(aDirecionamentos, "c71a3c2a-8de7-4fcc-8569-8c934edc664c")
+    aadd(aDirecionamentos, "15ea0920-d619-4119-b2fa-825fbc7e5c97")//transportadora <-Produção
+
+    jJsonParaPost["unidadeNegocioId"] := ::cUnidadeDeNegocio
+    jJsonParaPost["origem"] := aOrigem[1]
+    jJsonParaPost["destino"] := aDestino[1]
+    jJsonParaPost["carga"] := aCarga[1]
+    jJsonParaPost["pagamento"] := aPagamento[1]
+    jJsonParaPost["direcionamentos"] := aDirecionamentos
+    jJsonParaPost["configuracaoOferecimentoId"] := ::CFGOferecimentoID //Adicionado por joao 23/10
+    jJsonParaPost["visibilidade"] := ::_cvisibilidade
+
+    cJsonString := jJsonParaPost:toJson()
+    cJsonString := EncodeUTF8(cJsonString)
+    
+    oRestClient:setPostParams(cJsonString)
+
+    if oRestClient:Post(::aHeader)
+        jJson:FromJson('{"Json":'+ oRestClient:CRESULT +'}')
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        lRet := .T.
+        AAdd(aRet,cStatuscode)
+        AAdd(aRet,jJson)
+        //FWLogMsg()
+    else
+        oRet := oRestClient:ORESPONSEH
+        cStatuscode := oRet['CSTATUSCODE'] 
+        jJson:FromJson('{"Json": '+ cStatuscode +'}')
+        AAdd(aRet,cStatuscode)
+    endif
+
+    FWRestArea(aArea)
+//Novo modo de retorno
+Return aRet

@@ -1,0 +1,41 @@
+/*/{Protheus.doc} SendForecast
+(long_description)
+@type user function
+@author Joao Gomes
+@since 22/11/2024
+@version 1.0
+(examples)
+/*/
+User Function SendForcast()
+	Local cRota := "anexos/Forcast/dados.csv" //Atualizar para a rota normal.
+	Local aDados	:= {}
+	Local nHandle	:= 0
+	Local nLast		:= 0
+	//Local cLine		:= ""
+	//Local nRecno	:= 0
+	Local cBuffer	:= ""
+	//Local nI		:= 0
+	//Local nJ		:= 0
+	//Local nContador := 1
+
+	nHandle := FT_FUse(cRota)
+	If nHandle == -1
+		Alert("Arquivo não pode ser aberto")
+		Return
+	EndIf
+
+	FT_FGOTOP()
+	nLast := FT_FLastRec()
+	ProcRegua(nLast)
+
+	While !FT_FEOF()
+		IncProc("Lendo arquivo texto...")
+		cBuffer := FT_FREADLN()
+		aAdd(aDados,StrTokArr(cBuffer,","))
+		FT_FSKIP()
+	EndDo
+
+	FT_FUSE()
+
+
+Return

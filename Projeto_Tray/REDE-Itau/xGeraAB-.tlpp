@@ -1,0 +1,33 @@
+#Include "RwMake.ch"
+#Include "Protheus.ch"
+#Include "TBIConn.ch"
+#Include "TopConn.ch"  
+#Include "FileIO.ch"
+#Include "ParmType.ch"
+/*/{Protheus.doc} MALTTFF()
+(Tela para forçar geração de AB- pendentes)
+@type  Function
+@author JOAO GOMES // bibliotecas adicionadas
+@since 02/09/2024
+@example
+(examples)
+@see (links_or_references)
+    /*/
+User Function xForcaBuscaRede()
+	Local oDlgPar, oData
+	Private dDataDe  := GetMv("MV_ULMES")+1
+	Private dDataAte := LastDay(GetMv("MV_ULMES")+1) 
+	// Monta a tela
+	DEFINE MSDIALOG oDlgPar TITLE "Força geração de AB-" FROM 001,001 TO 240,390 PIXEL
+	@ 021,025 SAY "Clique no botao OK para forçar a geração de AB- pendentes" SIZE 150,09 PIXEL OF oDlgPar
+    @ 031,040 SAY "Adicione a data da(s) compra(s)" SIZE 150,09 PIXEL OF oDlgPar
+	@ 042,045 SAY "Data Inicio:" 		SIZE 150, 009 PIXEL OF oDlgPar
+	@ 041,090 MSGET oData VAR dDataDe 		SIZE 060,009 PIXEL OF oDlgPar PICTURE "@D" HASBUTTON
+	@ 056,045 SAY "Data Inicio:" 		SIZE 150, 009 PIXEL OF oDlgPar
+	@ 055,090 MSGET oData VAR dDataAte 		SIZE 060,009 PIXEL OF oDlgPar PICTURE "@D" HASBUTTON
+	@ 065,035 SAY "---------------------------------------------------------------------"   SIZE 200,09 PIXEL OF oDlgPar
+	DEFINE SBUTTON FROM 075,68 TYPE 1 ACTION (U_xCHFIN040(dDataDe,dDataAte),oDlgPar:End()) ENABLE OF oDlgPar
+	DEFINE SBUTTON FROM 075,108 TYPE 2 ACTION (oDlgPar:End()) ENABLE OF oDlgPar
+	ACTIVATE MSDIALOG oDlgPar CENTERED
+Return
+

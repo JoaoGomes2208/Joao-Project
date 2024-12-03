@@ -1,0 +1,61 @@
+
+#Include "Protheus.ch"
+#include 'rwmake.ch'
+#include 'topconn.ch'
+#include 'tbiconn.ch'
+
+
+/*/{Protheus.doc} xGeraEtiqueta
+(Gera o numero de etiquetas selecionado na função de chamada: xImpSB8)
+@type User function
+@author Joao Gomes
+@since 21/10/2024
+@param _aItens, array, Dados das etiqueta
+/*/
+User Function xGeraEtiqueta(_aItens)
+
+	Local _nX
+	Local cPorta    := GetNewPar("MV_ZEBPORT","LPT1")
+	Local cModelo   := "ZEBRA"
+	Local nColIni 	:= GetNewPar("MV_XSMS08A",6)
+	Local nLinIni 	:= 3
+	Local _nInc 	:= 10
+	Local _nEtiq	:= 0
+    Local _nY
+	Private _cCodBar	:= ""
+
+	//Analisa os itens a serem impressos
+	For _nX := 1 to Len(_aItens)
+
+		_cCodBar := ALLTRIM(_aItens[_nX][1])+ALLTRIM(_aItens[_nX][3])
+        _nEtiq := _aItens[_nX][8] 
+
+		For _nY := 1 to _nEtiq
+			// Efetua a impressão
+			MSCBPRINTER(cModelo,cPorta, , 40   ,.f.)
+
+			MSCBCHKSTATUS(.F.)
+
+			MSCBBEGIN(1,6)
+
+			MSCBSAY(nColIni		, nLinIni          ,"COD: "+_aItens[_nX][1], "N", "0", "080,050",,,,,.T.)
+			MSCBSAY(nColIni		, nLinIni+(_nInc*1),"ITEM: "+_aItens[_nX][2], "N", "0", "070,050",,,,,.T.)
+			MSCBSAY(nColIni		, nLinIni+(_nInc*2),"LOTE: "+_aItens[_nX][3], "N", "0","070,050",,,,,.T.)
+			MSCBSAY(nColIni		, nLinIni+(_nInc*3),"VAL: "+DTOC(STOD(_aItens[_nX][4])), "N", "0", "070,050",,,,,.T.)
+			MSCBSAY(nColIni*10	, nLinIni+(_nInc*3),"QTD: "+CvalToChar(_aItens[_nX][5])+" "+_aItens[_nX][6], "N", "0", "070,050",,,,,.T.)
+
+			Gerabarra()
+			MSCBEND()
+		Next _nY
+
+	Next _nX
+
+	MSCBCLOSEPRINTER()
+
+Return
+
+Static Function GeraBarra()
+
+	MSCBWrite('^FO100,330^BY3,1,96^BCMB07, 96,Y,N,N,N^FD'+_cCodBar+'^FS'+CHR(13)+CHR(10))
+
+Return
